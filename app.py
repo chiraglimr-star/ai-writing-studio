@@ -3,38 +3,43 @@ from __future__ import annotations
 import io
 import re
 import time
-import difflib
+import random
 import logging
-from typing import List, Optional
+import difflib
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Optional
 
 import streamlit as st
 from google import genai
 from google.genai import types
 
 # =========================================================
-# APPLICATION CONFIGURATION
+# CONFIGURATION
 # =========================================================
 
 st.set_page_config(
-    page_title="Professional AI Writing Studio & Bypass",
+    page_title="Professional AI Writing Studio",
     page_icon="✍️",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-APP_NAME = "Professional AI Writing Studio & Bypass"
+APP_NAME = "Professional AI Writing Studio"
+
+# Google AI Studio model təyinatı
 DEFAULT_MODEL = "gemini-3.8-flash"
 
-MAX_CHUNK_WORDS = 900
-MAX_RETRIES = 3
+MAX_CHUNK_WORDS = 650
+MAX_RETRIES = 4
 REQUEST_TIMEOUT_MS = 120_000
 MAX_OUTPUT_TOKENS = 8192
+MAX_PARALLEL_REQUESTS = 2
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("writing_studio")
 
 # =========================================================
-# DESIGN
+# UI & STYLING
 # =========================================================
 
 st.markdown("""
@@ -79,10 +84,10 @@ div[data-testid="stMetric"] {
 </style>
 """, unsafe_allow_html=True)
 
-st.title("✍️ Professional AI Writing Studio & Detector Bypass")
+st.title("✍️ Professional AI Writing Studio")
 st.caption(
-    "Advanced text humanization · Turnitin & GPTZero evasion · "
-    "Style consistency · Document quality assurance"
+    "Academic editing · Natural language refinement · "
+    "Document quality assurance"
 )
 
 # =========================================================
@@ -93,9 +98,9 @@ DEFAULT_STATE = {
     "result": "",
     "original": "",
     "processing_time": 0.0,
-    "last_error": "",
+    "history": [],
     "audit_report": "",
-    "history": []
+    "last_error": ""
 }
 
 for key, value in DEFAULT_STATE.items():
@@ -103,82 +108,56 @@ for key, value in DEFAULT_STATE.items():
         st.session_state[key] = value
 
 # =========================================================
-# WRITING MODES (BYPASS & HUMANIZATION FOCUS)
+# WRITING MODES
 # =========================================================
 
 MODES = {
-    "Academic Research (Bypass Focus)": (
-        "Use rigorous academic phrasing while maintaining high human perplexity "
-        "and variable sentence cadence to slip past Turnitin and GPTZero."
+    "Academic Research": (
+        "Use precise scholarly language, preserve the research "
+        "argument, distinguish evidence from interpretation, "
+        "and maintain appropriate academic terminology."
     ),
-    "Academic Essay (Student Voice)": (
-        "Write in a natural, authentic university student voice. "
-        "Avoid over-polished, robotic AI syntax and predictable transitions."
+    "Academic Essay": (
+        "Use clear university-level writing. Preserve the student's "
+        "own reasoning and avoid unnecessary complexity."
     ),
     "Journalistic": (
-        "Prioritize sharp, engaging human rhythm, variable sentence lengths "
-        "and natural storytelling flow."
+        "Use concise, clear, engaging journalistic language."
     ),
     "Professional Communication": (
-        "Use polished, natural corporate or professional writing "
-        "that sounds completely written by an experienced human specialist."
+        "Use polished, professional and direct language."
     ),
     "Creative Writing": (
-        "Maximize narrative flow, emotional resonance and stylistic unpredictability. "
-        "Completely eradicate machine-generated formatting."
+        "Improve narrative flow, imagery and emotional clarity "
+        "without changing the author's intended meaning."
     ),
     "Natural English": (
-        "Ensure maximum idiomatic fluency and human-like cadence "
-        "while strictly maintaining original meaning."
+        "Improve idiomatic fluency and natural expression."
     ),
     "Light Proofreading": (
-        "Correct grammar, spelling, punctuation and obvious awkwardness "
-        "with minimal disruption to the original text."
+        "Correct grammar, spelling and punctuation with minimal changes."
     )
 }
 
-# =========================================================
-# SYSTEM INSTRUCTIONS (DETECTOR BYPASS & HUMANIZATION)
-# =========================================================
-
 SYSTEM_PROMPT = """
-You are an expert human ghostwriter, advanced academic stylist,
-and specialist in evading AI detectors such as Turnitin, GPTZero, 
-Copyleaks, and Originality.ai.
+You are a professional editor and writing-quality specialist.
 
-Your primary objective is to rewrite and humanize the provided text 
-so that it reads as if it was written by an authentic human writer, 
-completely eliminating machine-like patterns, predictable structures, 
-and statistical uniformity.
+Your task is to improve the supplied document while preserving
+the author's intended meaning and intellectual contribution.
 
-CORE PRINCIPLES FOR BYPASSING DETECTORS:
+RULES:
 
-1. BURSTINESS & PERPLEXITY (CRITICAL)
-- Avoid uniform, predictable sentence lengths. AI detectors flag texts 
-  where every sentence has a similar word count.
-- Mix very short, punchy sentences with long, complex, subordinate clauses.
-- Vary sentence openings dynamically (never start consecutive sentences 
-  with the same grammatical structure or transition words like 'Furthermore', 
-  'Moreover', 'In addition', 'Thus').
-
-2. ELIMINATE AI SIGNATURE WORDS & CLICHÉS
-- Completely purge typical AI filler words and transition markers: 
-  'It is important to note', 'delve', 'testament', 'beacon', 'tapestry', 
-  'crucial', 'vital', 'multifaceted', 'in conclusion', 'realm', 'landscape'.
-- Use raw, natural, direct human expressions and transitions.
-
-3. MEANING & FACTUAL PRESERVATION
-- Preserve the author's original core arguments, reasoning, logic, 
-  and factual claims. Do not distort the original intent.
-- Maintain names, dates, numbers, citations, and technical terms precisely.
-
-4. IMPERFECTION & NATURAL FLOW
-- Introduce natural conversational cadence and organic flow typical 
-  of university-level student or professional human writers.
-
-5. OUTPUT
-- Return the revised humanized text only. 
-- Do not include meta-commentary, explanations, introductions, or conclusions.
+1. Preserve the original argument, thesis and reasoning.
+2. Never invent facts, statistics, sources or quotations.
+3. Preserve names, dates, numbers and technical terminology.
+4. Preserve citations and references exactly unless correction
+   is explicitly requested.
+5. Do not remove important qualifications or limitations.
+6. Maintain the requested language.
+7. Use clear and natural language appropriate to the genre.
+8. Do not add unsupported claims.
+9. Do not fabricate personal experiences or opinions.
+10. Return only the edited document.
 """
 
 # =========================================================
@@ -186,7 +165,7 @@ CORE PRINCIPLES FOR BYPASSING DETECTORS:
 # =========================================================
 
 def count_words(text: str) -> int:
-    return len(re.findall(r"\b[\w'-]+\b", text, flags=re.UNICODE))
+    return len(re.findall(r"\b[\w'-]+\b", text, re.UNICODE))
 
 def count_sentences(text: str) -> int:
     return len(re.findall(r"[.!?]+", text))
@@ -203,7 +182,7 @@ def get_stats(text: str) -> dict:
     }
 
 # =========================================================
-# DOCUMENT IMPORT
+# FILE IMPORT
 # =========================================================
 
 def read_uploaded_file(uploaded_file) -> str:
@@ -214,157 +193,148 @@ def read_uploaded_file(uploaded_file) -> str:
 
     if filename.endswith((".txt", ".md")):
         return uploaded_file.getvalue().decode(
-            "utf-8", errors="replace"
+            "utf-8",
+            errors="replace"
         )
 
     if filename.endswith(".docx"):
         try:
             from docx import Document
-
             document = Document(
                 io.BytesIO(uploaded_file.getvalue())
             )
-
-            paragraphs = [
-                p.text for p in document.paragraphs
-                if p.text.strip()
-            ]
-
+            content = []
+            for paragraph in document.paragraphs:
+                if paragraph.text.strip():
+                    content.append(paragraph.text)
             for table in document.tables:
                 for row in table.rows:
-                    paragraphs.append(
+                    content.append(
                         " | ".join(cell.text for cell in row.cells)
                     )
-
-            return "\n\n".join(paragraphs)
-
+            return "\n\n".join(content)
         except ImportError:
-            raise ValueError(
-                "DOCX support requires python-docx."
-            )
+            raise ValueError("DOCX support requires python-docx.")
 
-    raise ValueError(
-        "Unsupported file format. Use TXT, MD or DOCX."
-    )
+    raise ValueError("Unsupported file format.")
 
 # =========================================================
-# SAFE TEXT CHUNKING
+# DOCUMENT CHUNKING
 # =========================================================
 
-def split_long_paragraph(
-    paragraph: str,
-    max_words: int
-) -> List[str]:
-
-    sentences = re.split(
-        r"(?<=[.!?])\s+",
-        paragraph.strip()
-    )
-
+def split_long_paragraph(paragraph: str, max_words: int) -> list[str]:
+    words = paragraph.split()
+    if len(words) <= max_words:
+        return [paragraph]
     chunks = []
-    current = []
-    current_count = 0
-
-    for sentence in sentences:
-        sentence_words = count_words(sentence)
-
-        if sentence_words > max_words:
-            if current:
-                chunks.append(" ".join(current))
-                current = []
-                current_count = 0
-
-            words = sentence.split()
-
-            for i in range(0, len(words), max_words):
-                chunks.append(
-                    " ".join(words[i:i + max_words])
-                )
-            continue
-
-        if current_count + sentence_words > max_words:
-            chunks.append(" ".join(current))
-            current = [sentence]
-            current_count = sentence_words
-        else:
-            current.append(sentence)
-            current_count += sentence_words
-
-    if current:
-        chunks.append(" ".join(current))
-
+    for start in range(0, len(words), max_words):
+        chunks.append(" ".join(words[start:start + max_words]))
     return chunks
 
-def split_document(
-    text: str,
-    max_words: int = MAX_CHUNK_WORDS
-) -> List[str]:
-
+def split_document(text: str, max_words: int = MAX_CHUNK_WORDS) -> list[str]:
     paragraphs = [
         p.strip()
         for p in re.split(r"\n\s*\n", text)
         if p.strip()
     ]
-
     chunks = []
-    current_paragraphs = []
+    current = []
     current_words = 0
 
     for paragraph in paragraphs:
         paragraph_words = count_words(paragraph)
-
         if paragraph_words > max_words:
-            if current_paragraphs:
-                chunks.append(
-                    "\n\n".join(current_paragraphs)
-                )
-                current_paragraphs = []
+            if current:
+                chunks.append("\n\n".join(current))
+                current = []
                 current_words = 0
-
-            chunks.extend(
-                split_long_paragraph(paragraph, max_words)
-            )
+            chunks.extend(split_long_paragraph(paragraph, max_words))
             continue
 
         if current_words + paragraph_words > max_words:
-            chunks.append(
-                "\n\n".join(current_paragraphs)
-            )
-            current_paragraphs = [paragraph]
+            chunks.append("\n\n".join(current))
+            current = [paragraph]
             current_words = paragraph_words
         else:
-            current_paragraphs.append(paragraph)
+            current.append(paragraph)
             current_words += paragraph_words
 
-    if current_paragraphs:
-        chunks.append(
-            "\n\n".join(current_paragraphs)
-        )
+    if current:
+        chunks.append("\n\n".join(current))
 
     return chunks
 
 # =========================================================
-# GEMINI CLIENT
+# GEMINI CLIENT & TIMEOUT
 # =========================================================
 
 def create_client(api_key: str):
-
-    http_options = types.HttpOptions(
-        timeout=REQUEST_TIMEOUT_MS,
-        retry_options=types.HttpRetryOptions(
-            attempts=MAX_RETRIES,
-            initial_delay=1.0,
-            max_delay=8.0,
-            http_status_codes=[
-                408, 429, 500, 502, 503, 504
-            ]
+    return genai.Client(
+        api_key=api_key,
+        http_options=types.HttpOptions(
+            timeout=REQUEST_TIMEOUT_MS
         )
     )
 
-    return genai.Client(
-        api_key=api_key,
-        http_options=http_options
-    )
+# =========================================================
+# RETRY LOGIC (503 & Rate Limit Handler)
+# =========================================================
+
+def is_retryable_error(error: Exception) -> bool:
+    message = str(error).upper()
+    indicators = [
+        "503", "UNAVAILABLE", "429", "RESOURCE_EXHAUSTED",
+        "500", "502", "504", "408", "TIMEOUT"
+    ]
+    return any(indicator in message for indicator in indicators)
+
+def generate_text(
+    client,
+    model: str,
+    prompt: str,
+    temperature: float = 0.4,
+    status_callback=None
+) -> str:
+    last_error = None
+
+    for attempt in range(MAX_RETRIES + 1):
+        try:
+            if status_callback:
+                status_callback(f"API request: attempt {attempt + 1}")
+
+            started = time.time()
+            response = client.models.generate_content(
+                model=model,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    system_instruction=SYSTEM_PROMPT,
+                    temperature=temperature,
+                    max_output_tokens=MAX_OUTPUT_TOKENS
+                )
+            )
+            elapsed = time.time() - started
+            logger.info("Gemini request completed in %.2f seconds", elapsed)
+
+            result = response.text
+            if not result or not result.strip():
+                raise RuntimeError("Gemini returned an empty response.")
+
+            return result.strip()
+
+        except Exception as error:
+            last_error = error
+            if not is_retryable_error(error) or attempt >= MAX_RETRIES:
+                raise
+
+            delay = min(2 ** (attempt + 1), 20) + random.uniform(0, 1.5)
+            logger.warning("Temporary API error. Retrying in %.2f seconds: %s", delay, error)
+            
+            if status_callback:
+                status_callback(f"Server busy. Retrying in {delay:.1f}s...")
+
+            time.sleep(delay)
+
+    raise RuntimeError(f"Gemini request failed: {last_error}")
 
 # =========================================================
 # PROMPT BUILDER
@@ -374,89 +344,40 @@ def build_edit_prompt(
     original: str,
     mode: str,
     language: str,
-    intensity: int,
     preserve_voice: bool,
     writing_sample: str
 ) -> str:
-
-    voice_instruction = (
-        "Carefully align with the author's personal human writing style."
-        if preserve_voice else
-        "Adopt an organic, highly unpredictable human writing cadence."
-    )
-
     sample_section = ""
-
     if writing_sample.strip():
         sample_section = f"""
-PERSONAL WRITING SAMPLE REFERENCE:
-{writing_sample[:6000]}
-Analyze the rhythm, sentence breaks, and vocabulary of this sample and replicate its exact human pattern.
+AUTHOR'S WRITING SAMPLE:
+{writing_sample[:4000]}
+Use this only as a reference for vocabulary and tone.
 """
 
     return f"""
-EDITING MODE & STRATEGY:
+DOCUMENT TYPE:
 {mode}
 
-STYLE GUIDANCE:
+EDITING REQUIREMENTS:
 {MODES[mode]}
 
 TARGET LANGUAGE:
 {language}
 
-HUMANIZATION INTENSITY:
-{intensity}/10
-
-VOICE & CADENCE:
-{voice_instruction}
+AUTHOR VOICE:
+{"Preserve the author's existing writing style." if preserve_voice else "Use a clear professional style."}
 
 {sample_section}
 
-BYPASS INSTRUCTIONS:
-- Smash predictable sentence patterns to beat Turnitin and GPTZero.
-- Vary sentence length aggressively (mix short, punchy sentences with long, complex ones).
-- Eliminate all robotic AI phrasing, clichés, and generic transition words.
-- Keep all factual claims, data points, citations, and terminology fully intact.
-
-TEXT TO EDIT:
-
+DOCUMENT TO EDIT:
 {original}
 
-Return the complete humanized text only.
+Return the complete edited document.
 """
 
 # =========================================================
-# GEMINI GENERATION
-# =========================================================
-
-def generate_text(
-    client,
-    model: str,
-    prompt: str,
-    temperature: float = 0.7
-) -> str:
-
-    response = client.models.generate_content(
-        model=model,
-        contents=prompt,
-        config=types.GenerateContentConfig(
-            system_instruction=SYSTEM_PROMPT,
-            temperature=temperature,
-            max_output_tokens=MAX_OUTPUT_TOKENS
-        )
-    )
-
-    result = response.text
-
-    if not result or not result.strip():
-        raise RuntimeError(
-            "Gemini returned an empty response."
-        )
-
-    return result.strip()
-
-# =========================================================
-# DOCUMENT EDITING
+# DOCUMENT EDITING (PARALLEL SAFE)
 # =========================================================
 
 def edit_document(
@@ -465,78 +386,77 @@ def edit_document(
     original,
     mode,
     language,
-    intensity,
     preserve_voice,
     writing_sample,
     progress_callback
 ):
-
     chunks = split_document(original)
-
     if not chunks:
         raise ValueError("The document is empty.")
 
-    revised_chunks = []
+    revised_chunks = [""] * len(chunks)
 
-    for index, chunk in enumerate(chunks):
-
+    def process_chunk(index, chunk):
         prompt = build_edit_prompt(
             original=chunk,
             mode=mode,
             language=language,
-            intensity=intensity,
             preserve_voice=preserve_voice,
             writing_sample=writing_sample
         )
+        result = generate_text(client=client, model=model, prompt=prompt)
+        return index, result
 
-        revised = generate_text(
-            client=client,
-            model=model,
-            prompt=prompt
-        )
+    with ThreadPoolExecutor(max_workers=MAX_PARALLEL_REQUESTS) as executor:
+        futures = {
+            executor.submit(process_chunk, i, chunk): i
+            for i, chunk in enumerate(chunks)
+        }
 
-        revised_chunks.append(revised)
+        completed = 0
+        for future in as_completed(futures):
+            try:
+                index, result = future.result()
+                revised_chunks[index] = result
+                completed += 1
+                progress_callback(
+                    completed,
+                    len(chunks),
+                    f"Completed section {completed}/{len(chunks)}"
+                )
+            except Exception as e:
+                logger.error("Chunk processing failed: %s", e)
+                raise e
 
-        progress_callback(
-            index + 1,
-            len(chunks),
-            f"Humanizing section {index + 1} of {len(chunks)}"
-        )
+    if any(not item.strip() for item in revised_chunks):
+        raise RuntimeError("At least one document section is missing.")
 
     return "\n\n".join(revised_chunks)
 
 # =========================================================
-# CONSISTENCY REVIEW
+# QUALITY REVIEW
 # =========================================================
 
 def review_document(
     client,
     model,
     original,
-    revised
+    revised,
+    status_callback=None
 ):
-
     review_prompt = f"""
-You are an expert editor ensuring that humanized text did not lose 
-its factual accuracy or original meaning. Compare original and revised texts.
+Compare the original and edited documents. Check if main arguments, names, dates, numbers, and citations are fully preserved.
+Return a concise list of issues or state if everything is correct.
 
-Ensure no facts, numbers, names, or citations were altered or deleted.
-If any factual error exists, fix it while keeping the humanized structure.
+ORIGINAL:
+{original[:25000]}
 
-ORIGINAL DOCUMENT:
-{original}
-
-REVISED DOCUMENT:
-{revised}
-
-Return the final corrected humanized text only.
+EDITED:
+{revised[:25000]}
 """
-
     return generate_text(
-        client,
-        model,
-        review_prompt,
-        temperature=0.1
+        client, model, review_prompt,
+        temperature=0.1, status_callback=status_callback
     )
 
 # =========================================================
@@ -544,90 +464,39 @@ Return the final corrected humanized text only.
 # =========================================================
 
 with st.sidebar:
-
-    st.header("⚙️ Studio Settings")
+    st.header("Studio Settings")
 
     try:
         saved_key = st.secrets.get("GEMINI_API_KEY", "")
     except Exception:
         saved_key = ""
 
-    api_key = st.text_input(
-        "Gemini API Key",
-        value=saved_key,
-        type="password",
-        help="Enter your Gemini API key."
-    )
-
-    model_name = st.text_input(
-        "Gemini Model",
-        value=DEFAULT_MODEL
-    )
+    api_key = st.text_input("Gemini API Key", value=saved_key, type="password")
+    model_name = st.text_input("Gemini Model", value=DEFAULT_MODEL)
 
     st.divider()
 
-    editing_mode = st.selectbox(
-        "Writing Style & Strategy",
-        list(MODES.keys())
-    )
-
+    editing_mode = st.selectbox("Editing Mode", list(MODES.keys()))
     target_language = st.selectbox(
         "Target Language",
-        [
-            "English",
-            "Azerbaijani",
-            "Turkish",
-            "Russian",
-            "Preserve original language"
-        ]
+        ["English", "Azerbaijani", "Turkish", "Russian", "Preserve original language"]
     )
 
-    editing_strength = st.slider(
-        "Humanization / Editing Intensity",
-        min_value=1,
-        max_value=10,
-        value=8,
-        help="Higher intensity drastically alters sentence structures to defeat AI detectors."
-    )
+    preserve_voice = st.toggle("Preserve author's voice", value=True)
+    run_audit = st.toggle("Run consistency review", value=False)
 
-    preserve_voice = st.toggle(
-        "Preserve author's writing voice",
-        value=True
-    )
-
-    run_audit = st.toggle(
-        "Run second-pass consistency review (Sərt Audit)",
-        value=False,
-        help="Aktiv etdikdə fakt yoxlaması aparılır."
-    )
-
-    st.divider()
-
-    writing_sample = st.text_area(
-        "Personal Writing Sample",
-        height=130,
-        placeholder="Paste your previous writing sample..."
-    )
-
-    st.caption(
-        "The sample is used to mimic your personal human writing style."
-    )
+    writing_sample = st.text_area("Writing Sample", height=120)
+    st.caption("Use your previous writing as a style reference.")
 
 # =========================================================
-# MAIN INPUT AREA
+# INPUT
 # =========================================================
 
 left, right = st.columns(2)
 
 with left:
-
-    st.subheader("📥 Original Document")
-
-    uploaded_file = st.file_uploader(
-        "Upload TXT, MD or DOCX",
-        type=["txt", "md", "docx"]
-    )
-
+    st.subheader("Original Document")
+    uploaded_file = st.file_uploader("Upload TXT, MD or DOCX", type=["txt", "md", "docx"])
     uploaded_text = ""
 
     if uploaded_file:
@@ -636,39 +505,13 @@ with left:
         except Exception as error:
             st.error(str(error))
 
-    input_text = st.text_area(
-        "Document text",
-        value=uploaded_text,
-        height=500,
-        key="document_input",
-        placeholder="Paste your AI-generated or rough text here..."
-    )
-
+    input_text = st.text_area("Document text", value=uploaded_text, height=480, key="document_input")
     stats = get_stats(input_text)
-
-    st.caption(
-        f"Words: {stats['Words']} · "
-        f"Sentences: {stats['Sentences']} · "
-        f"Paragraphs: {stats['Paragraphs']}"
-    )
+    st.caption(f"{stats['Words']} words · {stats['Sentences']} sentences · {stats['Paragraphs']} paragraphs")
 
 with right:
-
-    st.subheader("📤 Humanized & Refined Document")
-
-    if st.session_state.result:
-
-        st.text_area(
-            "Final result",
-            value=st.session_state.result,
-            height=500,
-            key="result_preview"
-        )
-
-    else:
-        st.info(
-            "Your humanized document will appear here."
-        )
+    st.subheader("Edited Document")
+    st.text_area("Final result", value=st.session_state.result, height=480, key="result_preview")
 
 # =========================================================
 # PROCESSING
@@ -676,47 +519,24 @@ with right:
 
 st.divider()
 
-if st.button(
-    "🚀 START HUMANIZATION & BYPASS REFINEMENT",
-    use_container_width=True
-):
-
+if st.button("START DOCUMENT EDITING", use_container_width=True):
     if not api_key.strip():
-        st.error("Please enter your Gemini API key.")
-
+        st.error("Enter your Gemini API key.")
     elif not input_text.strip():
         st.warning("Please provide a document.")
-
     else:
-
-        previous_result = st.session_state.result
-
         progress = st.progress(0)
         status = st.empty()
         start_time = time.time()
 
-        def update_progress(current, total, message):
-
-            percentage = int(
-                current / total * 100
-            )
-
-            progress.progress(percentage)
-
-            status.info(
-                f"{message} · {percentage}% complete"
-            )
-
         try:
-
             client = create_client(api_key)
-
             chunks = split_document(input_text)
+            st.info(f"Document: {stats['Words']} words · {len(chunks)} sections")
 
-            st.info(
-                f"Document contains {stats['Words']} words "
-                f"and will be processed in {len(chunks)} sections."
-            )
+            def update_progress(current, total, message):
+                progress.progress(min(current / total, 1.0))
+                status.info(message)
 
             revised = edit_document(
                 client=client,
@@ -724,215 +544,100 @@ if st.button(
                 original=input_text,
                 mode=editing_mode,
                 language=target_language,
-                intensity=editing_strength,
                 preserve_voice=preserve_voice,
                 writing_sample=writing_sample,
                 progress_callback=update_progress
             )
 
-            audit_result = ""
-
+            audit_report = ""
             if run_audit:
-
-                status.info(
-                    "Running factual consistency review..."
-                )
-
-                try:
-                    audit_result = review_document(
-                        client,
-                        model_name,
-                        input_text,
-                        revised
-                    )
-
-                    if audit_result.strip():
-                        revised = audit_result
-
-                except Exception as audit_error:
-
-                    logger.exception(
-                        "Quality review failed"
-                    )
-
-                    st.warning(
-                        "The review failed. The original humanized "
-                        "result has been preserved."
-                    )
+                status.info("Checking factual consistency...")
+                audit_report = review_document(client, model_name, input_text, revised)
 
             elapsed = time.time() - start_time
-
-            if not revised.strip():
-                raise RuntimeError(
-                    "The final document is empty."
-                )
-
             st.session_state.result = revised
             st.session_state.original = input_text
             st.session_state.processing_time = elapsed
-            st.session_state.audit_report = audit_result
-            st.session_state.last_error = ""
+            st.session_state.audit_report = audit_report
 
             st.session_state.history.append({
-                "words": count_words(input_text),
+                "words": stats["Words"],
                 "time": round(elapsed, 2),
                 "mode": editing_mode
             })
 
-            progress.progress(100)
-
-            status.success(
-                f"Humanization and bypass completed successfully in {elapsed:.1f} seconds."
-            )
-
+            progress.progress(1.0)
+            status.success(f"Editing completed in {elapsed:.1f} seconds.")
             st.rerun()
 
         except Exception as error:
-
-            logger.exception("Document processing failed")
-
-            st.session_state.result = previous_result
-            st.session_state.last_error = str(error)
-
+            logger.exception("Processing failed")
             status.empty()
             progress.empty()
-
-            st.error(
-                f"Processing failed: {error}"
-            )
+            st.error(f"Processing failed: {error}")
 
 # =========================================================
 # RESULTS
 # =========================================================
 
 if st.session_state.result:
-
     result = st.session_state.result
-    original = st.session_state.original
-
     st.divider()
-    st.header("📊 Document Analysis")
+    st.header("Document Analysis")
 
-    before = get_stats(original)
+    before = get_stats(st.session_state.original)
     after = get_stats(result)
 
-    m1, m2, m3, m4 = st.columns(4)
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Original Words", before["Words"])
+    c2.metric("Edited Words", after["Words"])
+    c3.metric("Paragraphs", after["Paragraphs"])
+    c4.metric("Processing Time", f"{st.session_state.processing_time:.1f}s")
 
-    m1.metric(
-        "Original Words",
-        before["Words"]
-    )
-
-    m2.metric(
-        "Humanized Words",
-        after["Words"],
-        delta=after["Words"] - before["Words"]
-    )
-
-    m3.metric(
-        "Original Paragraphs",
-        before["Paragraphs"]
-    )
-
-    m4.metric(
-        "Processing Time",
-        f"{st.session_state.processing_time:.1f}s"
-    )
-
-    tab1, tab2, tab3 = st.tabs([
-        "Final Document",
-        "Comparison",
-        "Export"
-    ])
+    tab1, tab2, tab3, tab4 = st.tabs(["Final Document", "Comparison", "Quality Review", "Export"])
 
     with tab1:
-
-        st.text_area(
-            "Final editable version",
-            value=result,
-            height=450
-        )
+        st.text_area("Editable final text", value=result, height=450)
 
     with tab2:
-
         diff = difflib.unified_diff(
-            original.splitlines(),
+            st.session_state.original.splitlines(),
             result.splitlines(),
             fromfile="Original",
-            tofile="Humanized",
+            tofile="Edited",
             lineterm=""
         )
-
-        st.code(
-            "\n".join(diff),
-            language="diff"
-        )
+        st.code("\n".join(diff), language="diff")
 
     with tab3:
+        if st.session_state.audit_report:
+            st.write(st.session_state.audit_report)
+        else:
+            st.info("Consistency review was not enabled.")
 
-        st.download_button(
-            "⬇️ Download TXT",
-            data=result.encode("utf-8"),
-            file_name="humanized_document.txt",
-            mime="text/plain"
-        )
-
-        st.download_button(
-            "⬇️ Download Markdown",
-            data=result.encode("utf-8"),
-            file_name="humanized_document.md",
-            mime="text/markdown"
-        )
+    with tab4:
+        st.download_button("Download TXT", data=result.encode("utf-8"), file_name="edited_document.txt", mime="text/plain")
+        st.download_button("Download Markdown", data=result.encode("utf-8"), file_name="edited_document.md", mime="text/markdown")
 
         try:
             from docx import Document
-
             doc = Document()
-
             for paragraph in result.split("\n"):
                 doc.add_paragraph(paragraph)
-
             buffer = io.BytesIO()
             doc.save(buffer)
-
-            st.download_button(
-                "⬇️ Download DOCX",
-                data=buffer.getvalue(),
-                file_name="humanized_document.docx",
-                mime=(
-                    "application/vnd.openxmlformats-officedocument."
-                    "wordprocessingml.document"
-                )
-            )
-
+            st.download_button("Download DOCX", data=buffer.getvalue(), file_name="edited_document.docx", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
         except ImportError:
-            st.info(
-                "Install python-docx to enable DOCX export."
-            )
+            st.info("Install python-docx for DOCX export.")
 
 # =========================================================
-# SESSION HISTORY
+# HISTORY
 # =========================================================
 
 if st.session_state.history:
-
-    with st.expander("📚 Processing History"):
-
-        for index, item in enumerate(
-            reversed(st.session_state.history[-10:]),
-            start=1
-        ):
-
-            st.write(
-                f"{index}. {item['words']} words · "
-                f"{item['time']} seconds · "
-                f"{item['mode']}"
-            )
+    with st.expander("Processing History"):
+        for item in reversed(st.session_state.history[-10:]):
+            st.write(f"{item['words']} words · {item['time']} seconds · {item['mode']}")
 
 st.divider()
-
-st.caption(
-    "Professional AI Writing Studio & Bypass | "
-    "Powered by Google Gemini | "
-    "Designed to maximize human cadence and evade AI detection."
-)
+st.caption("Professional AI Writing Studio · Powered by Google Gemini")
