@@ -15,9 +15,9 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Sürətli və stabil işləyən Gemini modeli
+# Google-un tələb etdiyi və aktiv olan model adı
 MODEL_OPTIONS = [
-    "gemini-2.5-flash",
+    "gemini-3.8-flash",
 ]
 
 # =========================================================
