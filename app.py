@@ -3,21 +3,21 @@ from google import genai
 from google.genai import types
 import difflib
 import re
-import io
 
 # =========================================================
 # CONFIGURATION
 # =========================================================
 
 st.set_page_config(
-    page_title="Professional AI Writing Studio",
+    page_title="Professional AI Writing Studio & Bypass",
     page_icon="✍️",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
+# Sürətli və stabil işləyən Gemini modeli
 MODEL_OPTIONS = [
-    "gemini-3.8-flash",
+    "gemini-2.5-flash",
 ]
 
 # =========================================================
@@ -66,71 +66,57 @@ div[data-testid="stMetric"] {
 </style>
 """, unsafe_allow_html=True)
 
-st.title("✍️ Professional AI Writing Studio")
+st.title("✍️ Professional AI Writing Studio & Detector Bypass")
 
 st.caption(
-    "Advanced text refinement, academic editing, "
+    "Advanced text humanization, Turnitin & GPTZero evasion, "
     "style adaptation and linguistic quality assurance."
 )
 
 # =========================================================
-# SYSTEM INSTRUCTIONS
+# SYSTEM INSTRUCTIONS (DETECTOR BYPASS & HUMANIZATION)
 # =========================================================
 
 SYSTEM_PROMPT = """
-You are an expert multilingual editor, academic writing consultant,
-linguist and professional communication specialist.
+You are an expert human ghostwriter, advanced academic stylist,
+and specialist in evading AI detectors such as Turnitin, GPTZero, 
+Copyleaks, and Originality.ai.
 
-Your task is to improve the quality of user-provided writing.
+Your primary objective is to rewrite and humanize the provided text 
+so that it reads as if it was written by an authentic human writer, 
+completely eliminating machine-like patterns, predictable structures, 
+and statistical uniformity.
 
-CORE PRINCIPLES:
+CORE PRINCIPLES FOR BYPASSING DETECTORS:
 
-1. MEANING PRESERVATION
-Preserve the author's original argument, position, reasoning,
-intent and factual claims.
+1. BURSTINESS & PERPLEXITY (CRITICAL)
+- Avoid uniform, predictable sentence lengths. AI detectors flag texts 
+  where every sentence has a similar word count.
+- Mix very short, punchy sentences with long, complex, subordinate clauses.
+- Vary sentence openings dynamically (never start consecutive sentences 
+  with the same grammatical structure or transition words like 'Furthermore', 
+  'Moreover', 'In addition', 'Thus').
 
-2. NATURAL LANGUAGE
-Produce clear, fluent and idiomatic language.
-Avoid repetitive sentence constructions, mechanical transitions,
-unnecessary verbosity and generic expressions.
+2. ELIMINATE AI SIGNATURE WORDS & CLICHÉS
+- Completely purge typical AI filler words and transition markers: 
+  'It is important to note', 'delve', 'testament', 'beacon', 'tapestry', 
+  'crucial', 'vital', 'multifaceted', 'in conclusion', 'realm', 'landscape'.
+- Use raw, natural, direct human expressions and transitions.
 
-3. SENTENCE VARIATION
-Use a natural mixture of short, medium and longer sentences.
-Vary sentence openings where appropriate.
-Do not introduce artificial irregularity.
+3. MEANING & FACTUAL PRESERVATION
+- Preserve the author's original core arguments, reasoning, logic, 
+  and factual claims. Do not distort the original intent.
+- Maintain names, dates, numbers, citations, and technical terms precisely.
 
-4. VOCABULARY
-Choose precise vocabulary appropriate to the subject,
-audience, language and writing context.
-Do not replace simple words with unnecessarily complicated ones.
+4. IMPERFECTION & NATURAL FLOW
+- Introduce natural conversational cadence and organic flow typical 
+  of university-level student or professional human writers.
+- Do not make the text overly robotic or artificially sophisticated 
+  with obscure vocabulary; focus entirely on authentic human voice rhythm.
 
-5. PARAGRAPH STRUCTURE
-Improve logical connections between sentences and paragraphs.
-Remove repetition without removing important arguments.
-
-6. FACTUAL INTEGRITY
-Never invent statistics, quotations, research findings,
-references, sources, authors or historical information.
-Preserve names, dates, numbers and technical terminology.
-
-7. CITATIONS
-Preserve all existing citations and references.
-Never fabricate bibliographic information.
-Do not attribute claims to sources that were not provided.
-
-8. AUTHOR VOICE
-Retain the author's intended personality, perspective,
-level of formality and rhetorical approach.
-
-9. ACADEMIC INTEGRITY
-Do not conceal authorship, fabricate research or misrepresent
-the origin of ideas. Focus on legitimate editorial improvement.
-
-10. OUTPUT
-Return the revised text only.
-Do not include explanations unless explicitly requested.
-Do not add an introduction or conclusion that was absent
-from the original unless necessary for coherence.
+5. OUTPUT
+- Return the revised humanized text only. 
+- Do not include meta-commentary, explanations, introductions, or conclusions.
 """
 
 # =========================================================
@@ -138,41 +124,35 @@ from the original unless necessary for coherence.
 # =========================================================
 
 MODES = {
-    "Academic Research": """
-Use formal academic language.
-Prioritize conceptual precision, logical argumentation,
-analytical depth and coherent paragraph development.
-Preserve the author's academic level.
-Avoid unnecessarily complicated vocabulary.
+    "Academic Research (Bypass Focus)": """
+Use rigorous academic phrasing while maintaining high human perplexity. 
+Break predictable academic patterns to slip past Turnitin and GPTZero 
+without losing scholarly depth.
 """,
 
-    "Academic Essay": """
-Improve argumentative clarity and critical analysis.
-Strengthen topic sentences, transitions and evidence integration.
-Maintain a natural university-student academic voice.
+    "Academic Essay (Student Voice)": """
+Write in a natural, authentic undergraduate/graduate student voice. 
+Avoid over-polished, robotic AI syntax. Use organic reasoning flows.
 """,
 
     "Journalistic": """
-Use engaging, precise and accessible language.
-Prioritize readability, concrete details and natural rhythm.
-Avoid sensationalism and unsupported claims.
+Use engaging, sharp, human journalistic rhythm. 
+Prioritize variable sentence cadence and natural storytelling flow.
 """,
 
     "Professional Communication": """
-Use polished professional language.
-Prioritize clarity, conciseness, credibility and readability.
+Use polished, natural corporate or professional writing 
+that sounds completely written by an experienced human specialist.
 """,
 
     "Creative Writing": """
-Preserve the author's creative intent.
-Improve imagery, rhythm, vocabulary and narrative flow.
-Avoid generic expressions and unnecessary embellishment.
+Maximize narrative flow, emotional resonance, and stylistic unpredictability. 
+Completely eradicate machine-generated formatting.
 """,
 
     "Natural English": """
-Use idiomatic, fluent contemporary English.
-Prioritize natural collocations, grammatical accuracy
-and clear expression without changing the author's meaning.
+Ensure maximum idiomatic fluency and human-like cadence 
+while strictly maintaining original meaning.
 """
 }
 
@@ -198,7 +178,7 @@ with st.sidebar:
     st.divider()
 
     editing_mode = st.selectbox(
-        "Writing Style",
+        "Writing Style & Strategy",
         list(MODES.keys())
     )
 
@@ -214,9 +194,9 @@ with st.sidebar:
     )
 
     editing_strength = st.slider(
-        "Editing Intensity",
-        1, 10, 6,
-        help="Controls the extent of legitimate linguistic and structural editing."
+        "Humanization / Editing Intensity",
+        1, 10, 8,
+        help="Higher intensity drastically alters sentence structures to defeat AI detectors."
     )
 
     preserve_voice = st.toggle(
@@ -224,9 +204,11 @@ with st.sidebar:
         value=True
     )
 
+    # Sürətli işləməsi üçün default olaraq False təyin edildi
     fact_check = st.toggle(
-        "Run second-pass consistency review",
-        value=True
+        "Run second-pass consistency review (Sərt Audit)",
+        value=False,
+        help="Aktiv etdikdə fakt yoxlaması aparılır, lakin proses bir qədər uzana bilər."
     )
 
     st.divider()
@@ -240,7 +222,7 @@ with st.sidebar:
     )
 
     st.caption(
-        "The sample is used only to guide tone and writing style."
+        "The sample is used to mimic your personal human writing style."
     )
 
 # =========================================================
@@ -278,27 +260,23 @@ def build_prompt(
 ):
 
     voice_instruction = (
-        "Carefully preserve the author's writing voice."
+        "Carefully align with the author's personal human writing style."
         if preserve else
-        "Prioritize the selected professional writing style."
+        "Adopt an organic, highly unpredictable human writing cadence."
     )
 
     sample_instruction = ""
 
     if sample.strip():
         sample_instruction = f"""
-WRITING STYLE REFERENCE:
-
-Use the following sample only to understand the author's
-general vocabulary, tone, sentence preferences and voice.
-
-Do not copy its content.
-
+PERSONAL WRITING SAMPLE REFERENCE:
+Analyze the rhythm, sentence breaks, and vocabulary of this sample 
+and replicate its exact human pattern:
 {sample}
 """
 
     return f"""
-EDITING MODE:
+EDITING MODE & STRATEGY:
 {mode}
 
 STYLE GUIDANCE:
@@ -307,25 +285,19 @@ STYLE GUIDANCE:
 TARGET LANGUAGE:
 {language}
 
-EDITING INTENSITY:
+HUMANIZATION INTENSITY:
 {intensity}/10
 
-VOICE:
+VOICE & CADENCE:
 {voice_instruction}
 
 {sample_instruction}
 
-EDITING REQUIREMENTS:
-
-- Improve grammar and syntax.
-- Improve clarity and coherence.
-- Remove unnecessary repetition.
-- Improve transitions.
-- Preserve all substantive arguments.
-- Preserve citations, quotations and factual details.
-- Do not invent evidence.
-- Do not artificially increase text length.
-- Maintain the original intended meaning.
+BYPASS INSTRUCTIONS:
+- Smash predictable sentence patterns to beat Turnitin and GPTZero.
+- Vary sentence length aggressively (mix 5-word sentences with 35-word complex sentences).
+- Eliminate all robotic AI phrasing and generic transition words.
+- Keep all factual claims, data points, and citations fully intact.
 
 ORIGINAL TEXT:
 
@@ -333,7 +305,7 @@ ORIGINAL TEXT:
 {original}
 </original_text>
 
-Return the complete revised text.
+Return the complete humanized text.
 """
 
 # =========================================================
@@ -343,26 +315,11 @@ Return the complete revised text.
 def quality_review(client, model, original, revised):
 
     review_prompt = f"""
-You are an independent academic editor performing
-a factual and semantic consistency review.
+You are an expert editor ensuring that humanized text did not lose 
+its factual accuracy or original meaning. Compare original and revised texts.
 
-Compare the original and revised texts.
-
-Check for:
-
-1. Missing arguments.
-2. Changed factual claims.
-3. Altered numbers, dates or names.
-4. Missing citations.
-5. Modified quotations.
-6. Unsupported additions.
-7. Incorrect terminology.
-8. Meaning-changing grammatical edits.
-
-If you find a clear substantive error, correct it.
-
-Do not introduce stylistic changes simply for variety.
-Do not add new information.
+Ensure no facts, numbers, names, or citations were altered or deleted.
+If any factual error exists, fix it while keeping the humanized structure.
 
 ORIGINAL:
 {original}
@@ -370,7 +327,7 @@ ORIGINAL:
 REVISED:
 {revised}
 
-Return the complete corrected revised text only.
+Return the final corrected humanized text only.
 """
 
     response = client.models.generate_content(
@@ -378,7 +335,7 @@ Return the complete corrected revised text only.
         contents=review_prompt,
         config=types.GenerateContentConfig(
             temperature=0.1,
-            max_output_tokens=16000
+            max_output_tokens=8000
         )
     )
 
@@ -397,7 +354,7 @@ with col1:
     input_text = st.text_area(
         "Original text",
         height=520,
-        placeholder="Paste your document here...",
+        placeholder="Paste your AI-generated or rough text here...",
         key="original_text"
     )
 
@@ -411,7 +368,7 @@ with col1:
 
 with col2:
 
-    st.subheader("📤 Refined Document")
+    st.subheader("📤 Humanized & Refined Document")
 
     if "result" not in st.session_state:
         st.session_state.result = ""
@@ -427,7 +384,7 @@ with col2:
         )
     else:
         result_placeholder.info(
-            "Your refined document will appear here."
+            "Your humanized document will appear here."
         )
 
 # =========================================================
@@ -437,7 +394,7 @@ with col2:
 st.divider()
 
 process = st.button(
-    "🚀 START ADVANCED TEXT REFINEMENT",
+    "🚀 START HUMANIZATION & BYPASS REFINEMENT",
     use_container_width=True
 )
 
@@ -465,7 +422,7 @@ if process:
             )
 
             with st.spinner(
-                "Stage 1/2: Performing advanced linguistic editing..."
+                "Humanizing text and restructuring sentences for detector bypass..."
             ):
 
                 response = client.models.generate_content(
@@ -473,8 +430,8 @@ if process:
                     contents=prompt,
                     config=types.GenerateContentConfig(
                         system_instruction=SYSTEM_PROMPT,
-                        temperature=0.55,
-                        max_output_tokens=16000
+                        temperature=0.7,
+                        max_output_tokens=8000
                     )
                 )
 
@@ -488,7 +445,7 @@ if process:
             if fact_check:
 
                 with st.spinner(
-                    "Stage 2/2: Checking semantic and factual consistency..."
+                    "Performing factual consistency review..."
                 ):
 
                     revised_text = quality_review(
@@ -501,7 +458,7 @@ if process:
             st.session_state.result = revised_text
 
             st.success(
-                "Text refinement completed successfully."
+                "Text humanization and bypass completed successfully."
             )
 
             st.rerun()
@@ -565,16 +522,6 @@ if st.session_state.result:
             height=450
         )
 
-        st.button(
-            "Copy-ready text",
-            on_click=lambda: st.session_state.update(
-                copy_notice="Use the download option below to save your text."
-            )
-        )
-
-        if st.session_state.get("copy_notice"):
-            st.info(st.session_state.copy_notice)
-
     with tab2:
 
         st.subheader("Original vs Revised")
@@ -597,7 +544,7 @@ if st.session_state.result:
         st.download_button(
             "⬇️ Download TXT",
             data=result,
-            file_name="refined_document.txt",
+            file_name="humanized_document.txt",
             mime="text/plain",
             use_container_width=True
         )
@@ -605,7 +552,7 @@ if st.session_state.result:
         st.download_button(
             "⬇️ Download Markdown",
             data=result,
-            file_name="refined_document.md",
+            file_name="humanized_document.md",
             mime="text/markdown",
             use_container_width=True
         )
@@ -613,7 +560,7 @@ if st.session_state.result:
 st.divider()
 
 st.caption(
-    "Professional AI Writing Studio | "
+    "Professional AI Writing Studio & Bypass | "
     "Powered by Google Gemini | "
-    "Editorial quality assurance, not an AI detector bypass guarantee."
+    "Designed to maximize human cadence and evade AI detection."
 )
