@@ -18,15 +18,14 @@ from google.genai import types
 # =========================================================
 
 st.set_page_config(
-    page_title="Professional AI Writing Studio",
+    page_title="Professional AI Writing Studio & Bypass",
     page_icon="✍️",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-APP_NAME = "Professional AI Writing Studio"
+APP_NAME = "Professional AI Writing Studio & Bypass"
 
-# Google AI Studio model təyinatı
 DEFAULT_MODEL = "gemini-3.8-flash"
 
 MAX_CHUNK_WORDS = 650
@@ -84,10 +83,10 @@ div[data-testid="stMetric"] {
 </style>
 """, unsafe_allow_html=True)
 
-st.title("✍️ Professional AI Writing Studio")
+st.title("✍️ Professional AI Writing Studio & Detector Bypass")
 st.caption(
-    "Academic editing · Natural language refinement · "
-    "Document quality assurance"
+    "Advanced text humanization · Turnitin & GPTZero evasion · "
+    "Style consistency · Document quality assurance"
 )
 
 # =========================================================
@@ -108,56 +107,81 @@ for key, value in DEFAULT_STATE.items():
         st.session_state[key] = value
 
 # =========================================================
-# WRITING MODES
+# WRITING MODES (BYPASS & HUMANIZATION FOCUS)
 # =========================================================
 
 MODES = {
-    "Academic Research": (
-        "Use precise scholarly language, preserve the research "
-        "argument, distinguish evidence from interpretation, "
-        "and maintain appropriate academic terminology."
+    "Academic Research (Bypass Focus)": (
+        "Use rigorous academic phrasing while maintaining high human perplexity "
+        "and variable sentence cadence to slip past Turnitin and GPTZero."
     ),
-    "Academic Essay": (
-        "Use clear university-level writing. Preserve the student's "
-        "own reasoning and avoid unnecessary complexity."
+    "Academic Essay (Student Voice)": (
+        "Write in a natural, authentic university student voice. "
+        "Avoid over-polished, robotic AI syntax and predictable transitions."
     ),
     "Journalistic": (
-        "Use concise, clear, engaging journalistic language."
+        "Prioritize sharp, engaging human rhythm, variable sentence lengths "
+        "and natural storytelling flow."
     ),
     "Professional Communication": (
-        "Use polished, professional and direct language."
+        "Use polished, natural corporate or professional writing "
+        "that sounds completely written by an experienced human specialist."
     ),
     "Creative Writing": (
-        "Improve narrative flow, imagery and emotional clarity "
-        "without changing the author's intended meaning."
+        "Maximize narrative flow, emotional resonance and stylistic unpredictability. "
+        "Completely eradicate machine-generated formatting."
     ),
     "Natural English": (
-        "Improve idiomatic fluency and natural expression."
+        "Ensure maximum idiomatic fluency and human-like cadence "
+        "while strictly maintaining original meaning."
     ),
     "Light Proofreading": (
-        "Correct grammar, spelling and punctuation with minimal changes."
+        "Correct grammar, spelling and punctuation with minimal disruption to the original text."
     )
 }
 
+# =========================================================
+# SYSTEM INSTRUCTIONS (TURNITIN & GPTZERO BYPASS)
+# =========================================================
+
 SYSTEM_PROMPT = """
-You are a professional editor and writing-quality specialist.
+You are an expert human ghostwriter, advanced academic stylist,
+and specialist in evading AI detectors such as Turnitin, GPTZero, 
+Copyleaks, and Originality.ai.
 
-Your task is to improve the supplied document while preserving
-the author's intended meaning and intellectual contribution.
+Your primary objective is to rewrite and humanize the provided text 
+so that it reads as if it was written by an authentic human writer, 
+completely eliminating machine-like patterns, predictable structures, 
+and statistical uniformity.
 
-RULES:
+CORE PRINCIPLES FOR BYPASSING DETECTORS:
 
-1. Preserve the original argument, thesis and reasoning.
-2. Never invent facts, statistics, sources or quotations.
-3. Preserve names, dates, numbers and technical terminology.
-4. Preserve citations and references exactly unless correction
-   is explicitly requested.
-5. Do not remove important qualifications or limitations.
-6. Maintain the requested language.
-7. Use clear and natural language appropriate to the genre.
-8. Do not add unsupported claims.
-9. Do not fabricate personal experiences or opinions.
-10. Return only the edited document.
+1. BURSTINESS & PERPLEXITY (CRITICAL)
+- Avoid uniform, predictable sentence lengths. AI detectors flag texts 
+  where every sentence has a similar word count.
+- Mix very short, punchy sentences with long, complex, subordinate clauses.
+- Vary sentence openings dynamically (never start consecutive sentences 
+  with the same grammatical structure or transition words like 'Furthermore', 
+  'Moreover', 'In addition', 'Thus').
+
+2. ELIMINATE AI SIGNATURE WORDS & CLICHÉS
+- Completely purge typical AI filler words and transition markers: 
+  'It is important to note', 'delve', 'testament', 'beacon', 'tapestry', 
+  'crucial', 'vital', 'multifaceted', 'in conclusion', 'realm', 'landscape'.
+- Use raw, natural, direct human expressions and transitions.
+
+3. MEANING & FACTUAL PRESERVATION
+- Preserve the author's original core arguments, reasoning, logic, 
+  and factual claims. Do not distort the original intent.
+- Maintain names, dates, numbers, citations, and technical terms precisely.
+
+4. IMPERFECTION & NATURAL FLOW
+- Introduce natural conversational cadence and organic flow typical 
+  of university-level student or professional human writers.
+
+5. OUTPUT
+- Return the revised humanized text only. 
+- Do not include meta-commentary, explanations, introductions, or conclusions.
 """
 
 # =========================================================
@@ -292,7 +316,7 @@ def generate_text(
     client,
     model: str,
     prompt: str,
-    temperature: float = 0.4,
+    temperature: float = 0.7,
     status_callback=None
 ) -> str:
     last_error = None
@@ -350,30 +374,36 @@ def build_edit_prompt(
     sample_section = ""
     if writing_sample.strip():
         sample_section = f"""
-AUTHOR'S WRITING SAMPLE:
+PERSONAL WRITING SAMPLE REFERENCE:
 {writing_sample[:4000]}
-Use this only as a reference for vocabulary and tone.
+Analyze the rhythm, sentence breaks, and vocabulary of this sample and replicate its exact human pattern.
 """
 
     return f"""
-DOCUMENT TYPE:
+EDITING MODE & STRATEGY:
 {mode}
 
-EDITING REQUIREMENTS:
+STYLE GUIDANCE:
 {MODES[mode]}
 
 TARGET LANGUAGE:
 {language}
 
 AUTHOR VOICE:
-{"Preserve the author's existing writing style." if preserve_voice else "Use a clear professional style."}
+{"Carefully align with the author's personal human writing style." if preserve_voice else "Adopt an organic, highly unpredictable human writing cadence."}
 
 {sample_section}
 
-DOCUMENT TO EDIT:
+BYPASS INSTRUCTIONS:
+- Smash predictable sentence patterns to beat Turnitin and GPTZero.
+- Vary sentence length aggressively (mix short, punchy sentences with long, complex ones).
+- Eliminate all robotic AI phrasing, clichés, and generic transition words.
+- Keep all factual claims, data points, citations, and terminology fully intact.
+
+TEXT TO EDIT:
 {original}
 
-Return the complete edited document.
+Return the complete humanized text only.
 """
 
 # =========================================================
@@ -422,7 +452,7 @@ def edit_document(
                 progress_callback(
                     completed,
                     len(chunks),
-                    f"Completed section {completed}/{len(chunks)}"
+                    f"Humanizing section {completed}/{len(chunks)}"
                 )
             except Exception as e:
                 logger.error("Chunk processing failed: %s", e)
@@ -445,13 +475,13 @@ def review_document(
     status_callback=None
 ):
     review_prompt = f"""
-Compare the original and edited documents. Check if main arguments, names, dates, numbers, and citations are fully preserved.
+Compare the original and humanized documents. Ensure no facts, numbers, names, or citations were altered or deleted.
 Return a concise list of issues or state if everything is correct.
 
 ORIGINAL:
 {original[:25000]}
 
-EDITED:
+HUMANIZED:
 {revised[:25000]}
 """
     return generate_text(
@@ -476,17 +506,17 @@ with st.sidebar:
 
     st.divider()
 
-    editing_mode = st.selectbox("Editing Mode", list(MODES.keys()))
+    editing_mode = st.selectbox("Writing Style & Strategy", list(MODES.keys()))
     target_language = st.selectbox(
         "Target Language",
         ["English", "Azerbaijani", "Turkish", "Russian", "Preserve original language"]
     )
 
-    preserve_voice = st.toggle("Preserve author's voice", value=True)
+    preserve_voice = st.toggle("Preserve author's writing voice", value=True)
     run_audit = st.toggle("Run consistency review", value=False)
 
-    writing_sample = st.text_area("Writing Sample", height=120)
-    st.caption("Use your previous writing as a style reference.")
+    writing_sample = st.text_area("Personal Writing Sample", height=120)
+    st.caption("The sample is used to mimic your personal human writing style.")
 
 # =========================================================
 # INPUT
@@ -495,7 +525,7 @@ with st.sidebar:
 left, right = st.columns(2)
 
 with left:
-    st.subheader("Original Document")
+    st.subheader("📥 Original Document")
     uploaded_file = st.file_uploader("Upload TXT, MD or DOCX", type=["txt", "md", "docx"])
     uploaded_text = ""
 
@@ -510,7 +540,7 @@ with left:
     st.caption(f"{stats['Words']} words · {stats['Sentences']} sentences · {stats['Paragraphs']} paragraphs")
 
 with right:
-    st.subheader("Edited Document")
+    st.subheader("📤 Humanized & Refined Document")
     st.text_area("Final result", value=st.session_state.result, height=480, key="result_preview")
 
 # =========================================================
@@ -519,7 +549,7 @@ with right:
 
 st.divider()
 
-if st.button("START DOCUMENT EDITING", use_container_width=True):
+if st.button("🚀 START HUMANIZATION & BYPASS REFINEMENT", use_container_width=True):
     if not api_key.strip():
         st.error("Enter your Gemini API key.")
     elif not input_text.strip():
@@ -567,7 +597,7 @@ if st.button("START DOCUMENT EDITING", use_container_width=True):
             })
 
             progress.progress(1.0)
-            status.success(f"Editing completed in {elapsed:.1f} seconds.")
+            status.success(f"Humanization and bypass completed in {elapsed:.1f} seconds.")
             st.rerun()
 
         except Exception as error:
@@ -590,7 +620,7 @@ if st.session_state.result:
 
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Original Words", before["Words"])
-    c2.metric("Edited Words", after["Words"])
+    c2.metric("Humanized Words", after["Words"])
     c3.metric("Paragraphs", after["Paragraphs"])
     c4.metric("Processing Time", f"{st.session_state.processing_time:.1f}s")
 
@@ -604,7 +634,7 @@ if st.session_state.result:
             st.session_state.original.splitlines(),
             result.splitlines(),
             fromfile="Original",
-            tofile="Edited",
+            tofile="Humanized",
             lineterm=""
         )
         st.code("\n".join(diff), language="diff")
@@ -616,8 +646,8 @@ if st.session_state.result:
             st.info("Consistency review was not enabled.")
 
     with tab4:
-        st.download_button("Download TXT", data=result.encode("utf-8"), file_name="edited_document.txt", mime="text/plain")
-        st.download_button("Download Markdown", data=result.encode("utf-8"), file_name="edited_document.md", mime="text/markdown")
+        st.download_button("Download TXT", data=result.encode("utf-8"), file_name="humanized_document.txt", mime="text/plain")
+        st.download_button("Download Markdown", data=result.encode("utf-8"), file_name="humanized_document.md", mime="text/markdown")
 
         try:
             from docx import Document
@@ -626,7 +656,7 @@ if st.session_state.result:
                 doc.add_paragraph(paragraph)
             buffer = io.BytesIO()
             doc.save(buffer)
-            st.download_button("Download DOCX", data=buffer.getvalue(), file_name="edited_document.docx", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+            st.download_button("Download DOCX", data=buffer.getvalue(), file_name="humanized_document.docx", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
         except ImportError:
             st.info("Install python-docx for DOCX export.")
 
@@ -640,4 +670,4 @@ if st.session_state.history:
             st.write(f"{item['words']} words · {item['time']} seconds · {item['mode']}")
 
 st.divider()
-st.caption("Professional AI Writing Studio · Powered by Google Gemini")
+st.caption("Professional AI Writing Studio & Bypass · Powered by Google Gemini")
