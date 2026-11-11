@@ -10,28 +10,25 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Optional
 
 import streamlit as st
-from google import genai
-from google.genai import types
+from openai import OpenAI
 
 # =========================================================
 # CONFIGURATION
 # =========================================================
 
 st.set_page_config(
-    page_title="Professional AI Writing Studio & Bypass",
+    page_title="Professional ChatGPT Writing Studio & Bypass",
     page_icon="✍️",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-APP_NAME = "Professional AI Writing Studio & Bypass"
-
-DEFAULT_MODEL = "gemini-3.8-flash"
+APP_NAME = "Professional ChatGPT Writing Studio & Bypass"
+DEFAULT_MODEL = "gpt-4o"
 
 MAX_CHUNK_WORDS = 650
 MAX_RETRIES = 4
-REQUEST_TIMEOUT_MS = 120_000
-MAX_OUTPUT_TOKENS = 8192
+MAX_OUTPUT_TOKENS = 4096
 MAX_PARALLEL_REQUESTS = 2
 
 logging.basicConfig(level=logging.INFO)
@@ -66,12 +63,12 @@ section[data-testid="stSidebar"] {
     min-height: 44px;
     border-radius: 10px;
     font-weight: 650;
-    background: linear-gradient(120deg,#6366f1,#a855f7);
+    background: linear-gradient(120deg,#10b981,#3b82f6);
     color: white;
     border: none;
 }
 .stButton button:hover {
-    border: 1px solid #a78bfa;
+    border: 1px solid #6ee7b7;
     color: white;
 }
 div[data-testid="stMetric"] {
@@ -83,10 +80,10 @@ div[data-testid="stMetric"] {
 </style>
 """, unsafe_allow_html=True)
 
-st.title("✍️ Professional AI Writing Studio & Detector Bypass")
+st.title("✍️ Professional ChatGPT Writing Studio & Detector Bypass")
 st.caption(
     "Advanced text humanization · Turnitin & GPTZero evasion · "
-    "Style consistency · Document quality assurance"
+    "Powered by OpenAI GPT-4o"
 )
 
 # =========================================================
@@ -107,7 +104,7 @@ for key, value in DEFAULT_STATE.items():
         st.session_state[key] = value
 
 # =========================================================
-# WRITING MODES (BYPASS & HUMANIZATION FOCUS)
+# WRITING MODES
 # =========================================================
 
 MODES = {
@@ -289,30 +286,18 @@ def split_document(text: str, max_words: int = MAX_CHUNK_WORDS) -> list[str]:
     return chunks
 
 # =========================================================
-# GEMINI CLIENT & TIMEOUT
+# OPENAI CLIENT & RETRY HANDLER
 # =========================================================
 
-def create_client(api_key: str):
-    return genai.Client(
-        api_key=api_key,
-        http_options=types.HttpOptions(
-            timeout=REQUEST_TIMEOUT_MS
-        )
-    )
+def create_openai_client(api_key: str):
+    return OpenAI(api_key=api_key)
 
-# =========================================================
-# RETRY LOGIC (503 & Rate Limit Handler)
-# =========================================================
-
-def is_retryable_error(error: Exception) -> bool:
+def is_retryable_openai_error(error: Exception) -> bool:
     message = str(error).upper()
-    indicators = [
-        "503", "UNAVAILABLE", "429", "RESOURCE_EXHAUSTED",
-        "500", "502", "504", "408", "TIMEOUT"
-    ]
+    indicators = ["429", "500", "502", "503", "504", "RATE_LIMIT", "TIMEOUT"]
     return any(indicator in message for indicator in indicators)
 
-def generate_text(
+def generate_text_openai(
     client,
     model: str,
     prompt: str,
@@ -324,41 +309,41 @@ def generate_text(
     for attempt in range(MAX_RETRIES + 1):
         try:
             if status_callback:
-                status_callback(f"API request: attempt {attempt + 1}")
+                status_callback(f"OpenAI request: attempt {attempt + 1}")
 
             started = time.time()
-            response = client.models.generate_content(
+            response = client.chat.completions.create(
                 model=model,
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    system_instruction=SYSTEM_PROMPT,
-                    temperature=temperature,
-                    max_output_tokens=MAX_OUTPUT_TOKENS
-                )
+                messages=[
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=temperature,
+                max_tokens=MAX_OUTPUT_TOKENS
             )
             elapsed = time.time() - started
-            logger.info("Gemini request completed in %.2f seconds", elapsed)
+            logger.info("OpenAI request completed in %.2f seconds", elapsed)
 
-            result = response.text
+            result = response.choices[0].message.content
             if not result or not result.strip():
-                raise RuntimeError("Gemini returned an empty response.")
+                raise RuntimeError("OpenAI returned an empty response.")
 
             return result.strip()
 
         except Exception as error:
             last_error = error
-            if not is_retryable_error(error) or attempt >= MAX_RETRIES:
+            if not is_retryable_openai_error(error) or attempt >= MAX_RETRIES:
                 raise
 
             delay = min(2 ** (attempt + 1), 20) + random.uniform(0, 1.5)
-            logger.warning("Temporary API error. Retrying in %.2f seconds: %s", delay, error)
+            logger.warning("Temporary OpenAI error. Retrying in %.2f seconds: %s", delay, error)
             
             if status_callback:
                 status_callback(f"Server busy. Retrying in {delay:.1f}s...")
 
             time.sleep(delay)
 
-    raise RuntimeError(f"Gemini request failed: {last_error}")
+    raise RuntimeError(f"OpenAI request failed: {last_error}")
 
 # =========================================================
 # PROMPT BUILDER
@@ -410,7 +395,7 @@ Return the complete humanized text only.
 # DOCUMENT EDITING (PARALLEL SAFE)
 # =========================================================
 
-def edit_document(
+def edit_document_openai(
     client,
     model,
     original,
@@ -434,7 +419,7 @@ def edit_document(
             preserve_voice=preserve_voice,
             writing_sample=writing_sample
         )
-        result = generate_text(client=client, model=model, prompt=prompt)
+        result = generate_text_openai(client=client, model=model, prompt=prompt)
         return index, result
 
     with ThreadPoolExecutor(max_workers=MAX_PARALLEL_REQUESTS) as executor:
@@ -464,32 +449,6 @@ def edit_document(
     return "\n\n".join(revised_chunks)
 
 # =========================================================
-# QUALITY REVIEW
-# =========================================================
-
-def review_document(
-    client,
-    model,
-    original,
-    revised,
-    status_callback=None
-):
-    review_prompt = f"""
-Compare the original and humanized documents. Ensure no facts, numbers, names, or citations were altered or deleted.
-Return a concise list of issues or state if everything is correct.
-
-ORIGINAL:
-{original[:25000]}
-
-HUMANIZED:
-{revised[:25000]}
-"""
-    return generate_text(
-        client, model, review_prompt,
-        temperature=0.1, status_callback=status_callback
-    )
-
-# =========================================================
 # SIDEBAR
 # =========================================================
 
@@ -497,12 +456,12 @@ with st.sidebar:
     st.header("Studio Settings")
 
     try:
-        saved_key = st.secrets.get("GEMINI_API_KEY", "")
+        saved_key = st.secrets.get("OPENAI_API_KEY", "")
     except Exception:
         saved_key = ""
 
-    api_key = st.text_input("Gemini API Key", value=saved_key, type="password")
-    model_name = st.text_input("Gemini Model", value=DEFAULT_MODEL)
+    api_key = st.text_input("OpenAI API Key", value=saved_key, type="password", help="Enter your OpenAI API key starting with sk-...")
+    model_name = st.selectbox("OpenAI Model", ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo"])
 
     st.divider()
 
@@ -513,8 +472,6 @@ with st.sidebar:
     )
 
     preserve_voice = st.toggle("Preserve author's writing voice", value=True)
-    run_audit = st.toggle("Run consistency review", value=False)
-
     writing_sample = st.text_area("Personal Writing Sample", height=120)
     st.caption("The sample is used to mimic your personal human writing style.")
 
@@ -551,7 +508,7 @@ st.divider()
 
 if st.button("🚀 START HUMANIZATION & BYPASS REFINEMENT", use_container_width=True):
     if not api_key.strip():
-        st.error("Enter your Gemini API key.")
+        st.error("Enter your OpenAI API key.")
     elif not input_text.strip():
         st.warning("Please provide a document.")
     else:
@@ -560,7 +517,7 @@ if st.button("🚀 START HUMANIZATION & BYPASS REFINEMENT", use_container_width=
         start_time = time.time()
 
         try:
-            client = create_client(api_key)
+            client = create_openai_client(api_key)
             chunks = split_document(input_text)
             st.info(f"Document: {stats['Words']} words · {len(chunks)} sections")
 
@@ -568,7 +525,7 @@ if st.button("🚀 START HUMANIZATION & BYPASS REFINEMENT", use_container_width=
                 progress.progress(min(current / total, 1.0))
                 status.info(message)
 
-            revised = edit_document(
+            revised = edit_document_openai(
                 client=client,
                 model=model_name,
                 original=input_text,
@@ -579,16 +536,10 @@ if st.button("🚀 START HUMANIZATION & BYPASS REFINEMENT", use_container_width=
                 progress_callback=update_progress
             )
 
-            audit_report = ""
-            if run_audit:
-                status.info("Checking factual consistency...")
-                audit_report = review_document(client, model_name, input_text, revised)
-
             elapsed = time.time() - start_time
             st.session_state.result = revised
             st.session_state.original = input_text
             st.session_state.processing_time = elapsed
-            st.session_state.audit_report = audit_report
 
             st.session_state.history.append({
                 "words": stats["Words"],
@@ -624,7 +575,7 @@ if st.session_state.result:
     c3.metric("Paragraphs", after["Paragraphs"])
     c4.metric("Processing Time", f"{st.session_state.processing_time:.1f}s")
 
-    tab1, tab2, tab3, tab4 = st.tabs(["Final Document", "Comparison", "Quality Review", "Export"])
+    tab1, tab2, tab3 = st.tabs(["Final Document", "Comparison", "Export"])
 
     with tab1:
         st.text_area("Editable final text", value=result, height=450)
@@ -640,12 +591,6 @@ if st.session_state.result:
         st.code("\n".join(diff), language="diff")
 
     with tab3:
-        if st.session_state.audit_report:
-            st.write(st.session_state.audit_report)
-        else:
-            st.info("Consistency review was not enabled.")
-
-    with tab4:
         st.download_button("Download TXT", data=result.encode("utf-8"), file_name="humanized_document.txt", mime="text/plain")
         st.download_button("Download Markdown", data=result.encode("utf-8"), file_name="humanized_document.md", mime="text/markdown")
 
@@ -670,4 +615,4 @@ if st.session_state.history:
             st.write(f"{item['words']} words · {item['time']} seconds · {item['mode']}")
 
 st.divider()
-st.caption("Professional AI Writing Studio & Bypass · Powered by Google Gemini")
+st.caption("Professional ChatGPT Writing Studio & Bypass · Powered by OpenAI GPT-4o")
