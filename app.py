@@ -26,7 +26,7 @@ st.set_page_config(
 
 APP_NAME = "Professional AI Writing Studio & Bypass"
 
-DEFAULT_MODEL = "gemini-2.5-flash"
+DEFAULT_MODEL = "gemini-3.8-flash"  # Google-un tələb etdiyi aktiv model
 
 MAX_CHUNK_WORDS = 6000  # Pulsuz limitə qənaət etmək üçün artırıldı
 MAX_RETRIES = 4
