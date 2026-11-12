@@ -23,12 +23,11 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Daha stabil və sürətli standart model
 DEFAULT_MODEL = "gemini-2.5-flash"  
 MAX_CHUNK_WORDS = 4000
 MAX_RETRIES = 5
 REQUEST_TIMEOUT_MS = 60_000
-MAX_PARALLEL_REQUESTS = 1  # Server yüklənməsin deyə ardıcıl/tək-tək göndərmək 503 xətasını sıfıra endirir
+MAX_PARALLEL_REQUESTS = 1
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("writing_studio")
@@ -150,7 +149,7 @@ def generate_text(client, model: str, prompt: str) -> str:
                 time.sleep(delay)
                 continue
             raise e
-    raise RuntimeError(fAPI sorğusu uğursuz oldu: {last_error})
+    raise RuntimeError(f"API sorğusu uğursuz oldu: {last_error}")
 
 # =========================================================
 # SIDEBAR
@@ -196,25 +195,4 @@ if st.button("🚀 PROSESİ BAŞLAT", use_container_width=True):
             chunks = split_document(input_text)
             processed_chunks = []
 
-            for i, chunk in enumerate(chunks):
-                status_text.info(f"Hissə işlənir: {i+1} / {len(chunks)}")
-                prompt = f"Stil: {MODES[editing_mode]}\nDil: {target_lang}\n\nMətn:\n{chunk}"
-                res = generate_text(client, model_name, prompt)
-                processed_chunks.append(res)
-                progress_bar.progress((i + 1) / len(chunks))
-
-            final_output = "\n\n".join(processed_chunks)
-            st.session_state.result = final_output
-            st.session_state.processing_time = time.time() - start_t
-
-            status_text.success(f"Tamamlandı! Vaxt: {st.session_state.processing_time:.1f} san.")
-            st.rerun()
-
-        except Exception as e:
-            status_text.empty()
-            progress_bar.empty()
-            st.error(f"Xəta baş verdi: {e}")
-
-# Yükləmə düymələri
-if st.session_state.result:
-    st.download_button("📥 Nəticəni .txt olaraq yüklə", data=st.session_state.result.encode("utf-8"), file_name="netice.txt", mime="text/plain")
+            for i, chunk in enumerate(chunks
