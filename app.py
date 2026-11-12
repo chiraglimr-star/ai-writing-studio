@@ -5,7 +5,6 @@ import re
 import time
 import random
 import logging
-import difflib
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import streamlit as st
@@ -27,7 +26,6 @@ DEFAULT_MODEL = "gemini-2.5-flash"
 MAX_CHUNK_WORDS = 4000
 MAX_RETRIES = 5
 REQUEST_TIMEOUT_MS = 60_000
-MAX_PARALLEL_REQUESTS = 1
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("writing_studio")
@@ -113,12 +111,15 @@ def read_uploaded_file(uploaded_file) -> str:
 
 def split_document(text: str, max_words: int = MAX_CHUNK_WORDS) -> list[str]:
     paragraphs = [p.strip() for p in re.split(r"\n\s*\n", text) if p.strip()]
-    chunks, current, current_words = [], [], 0
+    chunks = []
+    current = []
+    current_words = 0
     for p in paragraphs:
         p_words = count_words(p)
         if current_words + p_words > max_words and current:
             chunks.append("\n\n".join(current))
-            current, current_words = [p], p_words
+            current = [p]
+            current_words = p_words
         else:
             current.append(p)
             current_words += p_words
@@ -192,4 +193,27 @@ if st.button("🚀 PROSESİ BAŞLAT", use_container_width=True):
 
         try:
             client = genai.Client(api_key=api_key, http_options=types.HttpOptions(timeout=REQUEST_TIMEOUT_MS))
-            chunks = split_document(input
+            chunks = split_document(input_text)
+            processed_chunks = []
+
+            for i, chunk in enumerate(chunks):
+                status_text.info(f"Hissə işlənir: {i+1} / {len(chunks)}")
+                prompt = f"Stil: {MODES[editing_mode]}\nDil: {target_lang}\n\nMətn:\n{chunk}"
+                res = generate_text(client, model_name, prompt)
+                processed_chunks.append(res)
+                progress_bar.progress((i + 1) / len(chunks))
+
+            final_output = "\n\n".join(processed_chunks)
+            st.session_state.result = final_output
+            st.session_state.processing_time = time.time() - start_t
+
+            status_text.success(f"Tamamlandı! Vaxt: {st.session_state.processing_time:.1f} san.")
+            st.rerun()
+
+        except Exception as e:
+            status_text.empty()
+            progress_bar.empty()
+            st.error(f"Xəta baş verdi: {e}")
+
+if st.session_state.result:
+    st.download_button("📥 Nəticəni .txt olaraq yüklə", data=st.session_state.result.encode("utf-8"), file_name="netice.txt", mime="text/plain")
