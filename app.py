@@ -192,7 +192,4 @@ if st.button("🚀 PROSESİ BAŞLAT", use_container_width=True):
 
         try:
             client = genai.Client(api_key=api_key, http_options=types.HttpOptions(timeout=REQUEST_TIMEOUT_MS))
-            chunks = split_document(input_text)
-            processed_chunks = []
-
-            for i, chunk in enumerate(chunks
+            chunks = split_document(input
